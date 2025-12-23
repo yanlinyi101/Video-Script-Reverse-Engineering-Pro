@@ -1,4 +1,3 @@
-
 export enum WorkflowStep {
   ANALYSIS = 1,
   TEMPLATE = 2,
@@ -17,12 +16,13 @@ export interface ScriptAnalysis {
 export interface Topic {
   title: string;
   explanation: string;
+  citationLinks?: string[];
 }
 
 export interface PublicationAssets {
-  videoCaption: string;
+  videoCaptions: string[];
   coverTitles: string[];
-  pinnedComment: string;
+  pinnedComments: string[];
   wechatSalesCopy: string;
 }
 

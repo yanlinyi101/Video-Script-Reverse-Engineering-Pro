@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { AppState, WorkflowStep, Topic } from './types';
 import { INITIAL_STATE } from './constants';
@@ -10,7 +9,6 @@ const App: React.FC = () => {
   const [state, setState] = useState<AppState>(INITIAL_STATE);
   const [isEditMode, setIsEditMode] = useState(false);
   
-  // Ref to hold AbortController for cancelling AI requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleError = (msg: string) => {
@@ -61,7 +59,7 @@ const App: React.FC = () => {
       setState(prev => ({
         ...prev,
         step: WorkflowStep.GENERATION,
-        finalScript: state.referenceScript, // 使用输入的剧本作为最终剧本显示
+        finalScript: state.referenceScript, 
         finalEditedScript: state.referenceScript,
         publicationAssets: assets,
         isLoading: false
@@ -120,21 +118,17 @@ const App: React.FC = () => {
       isLoading: true 
     }));
     
-    // Create new controller for this generation
     abortControllerRef.current = new AbortController();
 
     try {
-      // 1. 生成口播文案
       const script = await geminiService.generateFinalScript(
         state.confirmedCsv || state.csvTemplate, 
         title,
         state.targetWordCount
       );
       
-      // Check if cancelled
       if (!abortControllerRef.current) return;
 
-      // 2. 紧接着生成物料
       const assets = await geminiService.generatePublicationAssets(script);
 
       setState(prev => ({
@@ -171,11 +165,22 @@ const App: React.FC = () => {
 
   const getFormattedAssetsText = () => {
     if (!state.publicationAssets) return "";
-    const { videoCaption, coverTitles, pinnedComment, wechatSalesCopy } = state.publicationAssets;
-    return `【1. 发布文案】\n${videoCaption}\n\n【2. 封面标题】\n${coverTitles.join('\n')}\n\n【3. 置顶评论】\n${pinnedComment}\n\n【4. 微信转发话术】\n${wechatSalesCopy}`;
+    const { videoCaptions, coverTitles, pinnedComments, wechatSalesCopy } = state.publicationAssets;
+    
+    const formatList = (title: string, items: string[]) => {
+      return `【${title} (3选1)】\n${items.map((item, i) => `  ${i + 1}. ${item}`).join('\n')}`;
+    };
+
+    return `${formatList('1. 发布文案', videoCaptions)}\n\n${formatList('2. 封面标题', coverTitles)}\n\n${formatList('3. 置顶评论', pinnedComments)}\n\n【4. 微信转发话术】\n${wechatSalesCopy}`;
   };
 
   const currentCsvData = state.confirmedCsv || state.csvTemplate;
+
+  const navigateBack = () => {
+    if (state.step > 1) {
+      setState(prev => ({ ...prev, step: prev.step - 1 }));
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center pb-20">
@@ -211,7 +216,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Step 1: Analysis */}
         {state.step === WorkflowStep.ANALYSIS && (
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fadeIn">
             <h2 className="text-2xl font-bold text-slate-800 mb-4">第一步：摄取与深度分析</h2>
@@ -251,11 +255,10 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Step 2: CSV Template */}
         {state.step === WorkflowStep.TEMPLATE && (
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fadeIn">
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold text-slate-800">第二步：模版提取与确认</h2>
+              <h2 className="text-2xl font-bold text-slate-800">第二步：结构模版提取</h2>
               <button onClick={() => setIsEditMode(!isEditMode)} className="px-4 py-1.5 rounded-lg text-sm font-bold border bg-slate-50 text-slate-600">
                 {isEditMode ? '切换表格视图' : '编辑原始 CSV'}
               </button>
@@ -269,7 +272,10 @@ const App: React.FC = () => {
               )}
             </div>
             <div className="mt-8 flex justify-between items-center">
-              <button onClick={() => setState(prev => ({ ...prev, step: WorkflowStep.ANALYSIS }))} className="text-slate-500 font-medium">返回上一步</button>
+              <button onClick={navigateBack} className="flex items-center space-x-1 text-slate-500 hover:text-slate-700 font-medium transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                <span>返回上一步</span>
+              </button>
               <button disabled={state.isLoading} onClick={confirmTemplate} className="px-8 py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg">
                 确认模版并进行选题
               </button>
@@ -277,30 +283,49 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Step 3: Ideation */}
         {state.step === WorkflowStep.IDEATION && (
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fadeIn">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">第三步：选题构思</h2>
-            <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl mb-8">
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">第三步：选题构思</h2>
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl mb-4 flex items-center space-x-3">
+              <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <p className="text-xs text-amber-800 font-medium">提示：AI 选题已通过搜索增强。请点击 Citation 链接自行确认事实真实性后再行使用。</p>
+            </div>
+
+            <div className="bg-slate-50/50 border border-slate-200 p-6 rounded-2xl mb-8">
+              <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-slate-200/60">
+                <span className="text-sm font-bold text-slate-500 whitespace-nowrap">目标字数:</span>
+                <input 
+                  type="number" 
+                  className="w-28 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all"
+                  value={state.targetWordCount} 
+                  onChange={(e) => setState(prev => ({ ...prev, targetWordCount: parseInt(e.target.value) || 0 }))} 
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest">AI 选题偏好</label>
-                  <input type="text" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="输入方向，如：科技数码、育儿心经..."
-                    value={state.topicDirection} onChange={(e) => setState(prev => ({ ...prev, topicDirection: e.target.value }))} />
-                  <div className="flex items-center space-x-3">
-                    <span className="text-xs font-bold text-slate-400 whitespace-nowrap">目标字数:</span>
-                    <input type="number" className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm"
-                      value={state.targetWordCount} onChange={(e) => setState(prev => ({ ...prev, targetWordCount: parseInt(e.target.value) || 0 }))} />
-                  </div>
-                  <button disabled={state.isLoading} onClick={refreshTopicsWithDirection} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all">
-                    {state.isLoading ? '联想中...' : '由 AI 构思选题'}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI 选题偏好</label>
+                  <textarea 
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 placeholder-slate-300 resize-none min-h-[120px] transition-all shadow-sm mb-4 flex-1" 
+                    placeholder="输入方向，如：科技数码、育儿心经..."
+                    value={state.topicDirection} 
+                    onChange={(e) => setState(prev => ({ ...prev, topicDirection: e.target.value }))} 
+                  />
+                  <button 
+                    disabled={state.isLoading} 
+                    onClick={refreshTopicsWithDirection} 
+                    className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg active:scale-[0.98]"
+                  >
+                    {state.isLoading ? '实时联网搜索中...' : '联网联想新选题'}
                   </button>
                 </div>
 
-                <div className="bg-white border-2 border-dashed border-blue-100 p-6 rounded-2xl flex flex-col">
+                <div className="bg-white border-2 border-dashed border-blue-100 p-6 rounded-2xl flex flex-col h-full shadow-sm">
                   <label className="block text-xs font-bold text-blue-500 uppercase tracking-widest mb-4">自定义精准选题</label>
                   <textarea 
-                    className="flex-1 w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-blue-400 outline-none transition-all resize-none mb-4" 
+                    className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-blue-400 outline-none transition-all resize-none mb-4 text-slate-900 flex-1 min-h-[120px]" 
                     placeholder="在此输入您想要撰写的具体题目..."
                     value={state.customTopic}
                     onChange={(e) => setState(prev => ({ ...prev, customTopic: e.target.value }))}
@@ -308,26 +333,26 @@ const App: React.FC = () => {
                   <button 
                     disabled={state.isLoading || !state.customTopic.trim()} 
                     onClick={() => selectTopicAndGenerate(state.customTopic)}
-                    className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-black shadow-lg"
+                    className="w-full py-3.5 bg-slate-800 text-white rounded-xl font-bold hover:bg-black shadow-lg transition-all active:scale-[0.98]"
                   >
-                    生成全篇口播+物料 →
+                    直接生成全篇口播+物料
                   </button>
                 </div>
               </div>
             </div>
 
             {state.isLoading && (
-              <div className="flex flex-col items-center justify-center py-8 bg-blue-50 rounded-2xl border border-blue-100 animate-fadeIn mb-8">
+              <div className="flex flex-col items-center justify-center py-10 bg-blue-50/50 rounded-2xl border border-blue-100 animate-fadeIn mb-8">
                 <div className="text-blue-600 font-bold text-lg mb-4 flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin -ml-1 mr-3 h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  专家正在撰写，预计需要 30-60 秒...
+                  联网专家正在撰写，预计需要 30-60 秒...
                 </div>
                 <button 
                   onClick={cancelGeneration}
-                  className="px-6 py-2 bg-white border border-red-200 text-red-500 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors shadow-sm"
+                  className="px-8 py-2.5 bg-white border border-red-200 text-red-500 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors shadow-sm active:scale-95"
                 >
                   取消生成
                 </button>
@@ -338,20 +363,58 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 gap-4">
                 <p className="text-xs font-bold text-slate-400 uppercase px-2">或选择 AI 构思的选题：</p>
                 {state.topics.map((topic, idx) => (
-                  <div key={idx} onClick={() => selectTopicAndGenerate(topic)} className="p-6 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-200 hover:bg-white cursor-pointer transition-all group">
-                    <h3 className="text-lg font-bold text-slate-800 group-hover:text-blue-700">{topic.title}</h3>
-                    <p className="text-sm text-slate-500 mt-1">{topic.explanation}</p>
+                  <div key={idx} onClick={() => selectTopicAndGenerate(topic)} className="p-6 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-200 hover:bg-white cursor-pointer transition-all group relative">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-slate-800 group-hover:text-blue-700">{topic.title}</h3>
+                        <p className="text-sm text-slate-500 mt-1">{topic.explanation}</p>
+                        {topic.citationLinks && topic.citationLinks.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">参考来源:</span>
+                            {topic.citationLinks.map((link, lIdx) => (
+                              <a 
+                                key={lIdx} 
+                                href={link} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[10px] text-blue-500 hover:underline bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100"
+                              >
+                                Citation [{lIdx + 1}]
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-full shadow-sm">点击选择</span>
+                      </div>
+                    </div>
                   </div>
                 ))}
+              </div>
+            )}
+            
+            {!state.isLoading && (
+              <div className="mt-8">
+                <button onClick={navigateBack} className="flex items-center space-x-1 text-slate-500 hover:text-slate-700 font-medium transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  <span>返回上一步修改模版</span>
+                </button>
               </div>
             )}
           </div>
         )}
 
-        {/* Step 4: Final Generation Results */}
         {state.step === WorkflowStep.GENERATION && (
           <div className="space-y-8 animate-fadeIn">
-            {/* Box 1: Oral Script */}
+            <div className="flex justify-start">
+              <button onClick={navigateBack} className="flex items-center space-x-1 text-slate-500 hover:text-slate-700 font-medium transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                <span>返回选题页面</span>
+              </button>
+            </div>
+
             <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center space-x-3">
@@ -367,12 +430,11 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Box 2: Publication Assets */}
             <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center space-x-3">
                   <div className="bg-orange-100 p-2 rounded-lg"><svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></div>
-                  <h2 className="text-xl font-bold text-slate-800">全套发布物料 (点击转化增强)</h2>
+                  <h2 className="text-xl font-bold text-slate-800">全套发布物料 (多选一方案)</h2>
                 </div>
                 <button onClick={() => copyToClipboard(getFormattedAssetsText())} className="text-sm font-bold text-orange-600 hover:underline">复制物料</button>
               </div>
