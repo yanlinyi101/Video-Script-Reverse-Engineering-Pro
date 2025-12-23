@@ -1,11 +1,69 @@
-<div align="center">
+# 视频剧本策略大师 (Video Script Strategy Master)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+> **角色定义**：顶尖视频脚本策略师 & 文案专家，专注于通过“逆向工程”拆解并复刻爆款视频。
 
-  <h1>Built with AI Studio</h2>
+## 🎯 任务目标
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+本项目旨在为短视频创作者提供一套标准化的“逆向建模”工作流。通过 AI 深度分析成功视频的剧本，提取其底层逻辑，并基于相同框架生成高质量、具有传播力的原创内容。
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### 核心功能：
+1.  **摄取与分析 (Analysis)**：通过 Gemini 3 Pro 对参考剧本进行多维度拆解（结构、钩子、语调、节奏）。
+2.  **模版提取 (Template Extraction)**：将感性的分析结果转化为理性的 **CSV 结构模版**。
+3.  **选题构思 (Ideation)**：基于提取的模版，结合用户方向，利用 AI 生成 3-4 个具有爆款潜质的新选题。
+4.  **全篇生成 (Generation)**：
+    *   生成纯口播文案（无冗余拍摄指令，直接适配提词器）。
+    *   生成全套发布物料（基于“好奇心缺口”理论的文案、标题、置顶评论及转发话术）。
 
-</div>
+## 🛠 技术实现
+
+### 前端技术栈：
+*   **React 19**：构建响应式 UI 界面。
+*   **Tailwind CSS**：实现现代感、专业且简洁的视觉设计。
+*   **TypeScript**：确保代码逻辑的严密性与可维护性。
+*   **ES Modules (esm.sh)**：轻量化依赖管理。
+
+### AI 核心：
+*   **Google Gemini API (@google/genai)**：
+    *   使用 `gemini-3-pro-preview` 进行深度逻辑分析和高质量剧本撰写。
+    *   使用 `gemini-3-flash-preview` 进行快速的 CSV 提取和结构化 JSON 生成。
+*   **智能特性**：
+    *   **Thinking Process**：在生成剧本时开启推理预算，确保内容的深度与逻辑严密。
+    *   **结构化输出**：强制 AI 输出 JSON/CSV 格式，实现 UI 与 AI 的完美数据同步。
+
+## 🧠 提示词策略总结 (Prompt Engineering)
+
+本项目核心竞争力在于其深度定制的提示词体系，主要分为以下几个维度：
+
+### 1. 系统角色定位 (System Instruction)
+通过 `SYSTEM_PROMPT` 确立了 AI 的“专家人格”：
+*   **流量算法视角**：理解好奇心缺口（Curiosity Gap）理论。
+*   **人设化表达**：内置“肖东坡”人设，使生成的微信转发话术具有真实的情感温度和社交属性。
+
+### 2. 结构化反馈 (Structured Feedback)
+在提取模版阶段，通过强制要求 **CSV 格式**，将模糊的“创作风格”具象化为四个维度：
+*   模块 (Module)
+*   功能与目标 (Function & Goal)
+*   标准化手法 (Standardized Technique)
+*   关键元素示例 (Key Elements)
+
+### 3. 内容创作准则 (Writing Constraints)
+在最终生成阶段，通过“🚨 极其重要要求”进行强约束：
+*   **纯口播限制**：严禁出现“画面转场”等废话，提高生产力。
+*   **字数控制**：精准匹配短视频黄金时长。
+*   **逻辑复刻**：确保新内容不仅是换皮，而是继承了爆款的“骨架”。
+
+### 4. 传播力增强 (Distribution Assets)
+基于传播学理论定制的物料生成逻辑：
+*   **封面标题**：遵循“冲突感 + 数字 + 价值承诺”的黄金公式。
+*   **置顶评论**：应用“损失厌恶”心理，促使观众从观看转为行动。
+
+---
+
+## 🚀 快速开始
+
+1.  在环境配置中填入 `API_KEY`。
+2.  粘贴一段你想模仿的爆款视频文案。
+3.  按照“摄取 -> 模版 -> 选题 -> 生成”的步骤点击即可。
+
+---
+*本项目由高级前端工程与最尖端的生成式 AI 技术结合驱动。*
