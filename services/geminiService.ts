@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_PROMPT } from "../constants";
 
@@ -39,46 +40,47 @@ CSV必须包含以下表头：
     const ai = getAI();
     const directionPrompt = direction ? `请特别聚焦于以下选题方向: "${direction}"。` : '请基于模版自由构思具有潜力的选题。';
     
+    // Using gemini-3-pro-preview as it's better for complex reasoning/ideation
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview", 
       contents: `基于以下确认的CSV剧本模版，构思3-4个真实、有深度且有潜力的全新选题。
       
 🚨 核心要求：
-1. **真实性保证**：你必须利用 Google Search 实时搜索功能，确保选题内容基于真实的社会热点、行业趋势、科学事实或历史背景。
-2. **附带引用 (Citations)**：每个选题必须提供来源链接（Citation Links），证明该选题背后的事实依据或灵感来源。
-3. **创新组合**：将搜索到的真实事实与以下 CSV 模版的逻辑结构相结合。
+1. **真实性保证**：你必须利用 Google Search 实时搜索功能，确保选题内容基于真实的社会热点、行业趋势、科学事实 or 历史背景。
+2. **格式要求**：你必须以严格的 JSON 数组格式返回，不要包含任何 Markdown 代码块包裹。
+3. **内容结构**：每个对象包含 title (选题标题), explanation (深度解析) 两个字段。
 
 ${directionPrompt}
 
 模版如下：\n${csvTemplate}\n\n
-请以JSON数组格式输出，每个对象包含 title、explanation 和 citationLinks (数组格式) 三个字段。`,
+请直接输出 JSON 数组。`,
       config: {
         systemInstruction: SYSTEM_PROMPT,
         tools: [{ googleSearch: {} }], 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              explanation: { type: Type.STRING },
-              citationLinks: { 
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              }
-            },
-            required: ["title", "explanation", "citationLinks"]
-          }
-        }
+        temperature: 0.7,
       }
     });
 
+    const rawText = response.text || '[]';
+    // Extracting URLs from grounding metadata as per core requirement
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const searchLinks = groundingChunks
+      .filter((chunk: any) => chunk.web && chunk.web.uri)
+      .map((chunk: any) => chunk.web.uri);
+
     try {
-      return JSON.parse(response.text || '[]');
+      // Basic cleanup in case model returns markdown code block
+      const jsonStr = rawText.replace(/```json\n?|```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      
+      return parsed.map((item: any) => ({
+        ...item,
+        citationLinks: searchLinks.slice(0, 3) // Distribute first few links across topics or keep them general
+      }));
     } catch (e) {
-      console.error("Failed to parse AI response as JSON:", response.text);
-      return [];
+      console.error("Failed to parse AI response as JSON:", rawText);
+      // Fallback: If JSON parsing fails, return a simulated list based on the text to avoid empty UI
+      return [{ title: "生成失败，请重试", explanation: "AI 返回格式不符合预期，请尝试再次点击联网联想。", citationLinks: [] }];
     }
   },
 
@@ -115,6 +117,7 @@ CSV模版：\n${csvTemplate}\n\n
 剧本全文：\n${finalScript}\n\n
 要求：
 1. **videoCaptions**: 提供3款不同风格的发布文案。要求制造强烈好奇心，严禁总结，前15字必须极其抓人。
+   🚨 重要：每条文案末尾必须严格执行系统指令中的【话题标签要求】，追加 4-5 个话题标签（格式如 #话题）。
 2. **coverTitles**: 提供3款封面标题（数字悬念型、冲突挑衅型、剧情留白型）。
 3. **pinnedComments**: 提供3款不同策略的置顶评论（社交话术型、存档工具型、情绪认同型）。
    写作规则：1) 强关联内容；2) 字数≤20字；3) 包含且仅包含1个emoji；4) 使用“你”；5) 零成本包装。
