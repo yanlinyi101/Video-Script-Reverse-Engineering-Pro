@@ -9,13 +9,34 @@ export const geminiService = {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: `请深度分析以下视频参考剧本：\n\n${script}\n\n请从结构、钩子机制、节奏感、语调（如宏大叙事、情感叙事、数据驱动）以及独特的风格元素进行多维度拆解。`,
+      contents: `请深度分析以下视频参考剧本：\n\n${script}\n\n
+      1. 请从结构、钩子机制、节奏感、语调（如宏大叙事、情感叙事、数据驱动）以及独特的风格元素进行多维度拆解。
+      2. 提取脚本的【开场白】（Hook），并基于该开场白的功能（如：吸引好奇心、贩卖焦虑、反常识等），额外创作3个功能相似但表达不同的句式。
+      
+      🚨 极其重要：对于每一个开场白（包括原句和3个AI生成的句式），你必须将其拆解为【模板】和【可替换词汇（Slots）】。
+      
+      请以 JSON 格式返回，包含以下字段：
+      - analysis: 深度拆解的文本内容
+      - hookOptions: 数组，包含4个对象。每个对象包含：
+        - style: 风格描述（如：原剧本风格、好奇心驱动、焦虑感营造等）
+        - content: 完整的 Hook 文本
+        - template: 包含占位符的模板字符串，占位符格式为 {key}。例如："为什么历史上那些{label}的人，最后都{end}？"
+        - slots: 一个对象，键是模板中的占位符（如 "label"），值是一个包含以下字段的对象：
+          - current: 该位置在当前 content 中的实际词汇
+          - options: 3-5个适合该位置的替换词建议
+          - label: 该位置的功能标签（如 "正面标签"、"负面结局"）`,
       config: {
         systemInstruction: SYSTEM_PROMPT,
         temperature: 0.7,
+        responseMimeType: "application/json",
       }
     });
-    return response.text || '';
+    try {
+      return JSON.parse(response.text || '{}');
+    } catch (e) {
+      console.error("Failed to parse analysis response:", response.text);
+      return { analysis: response.text || '', hookOptions: [] };
+    }
   },
 
   async extractCSVTemplate(analysisResult: string) {
@@ -49,6 +70,7 @@ CSV必须包含以下表头：
 1. **真实性保证**：你必须利用 Google Search 实时搜索功能，确保选题内容基于真实的社会热点、行业趋势、科学事实 or 历史背景。
 2. **格式要求**：你必须以严格的 JSON 数组格式返回，不要包含任何 Markdown 代码块包裹。
 3. **内容结构**：每个对象包含 title (选题标题), explanation (深度解析) 两个字段。
+   🚨 重要：explanation 字段应使用 Markdown 格式，包含加粗、列表、引用等，使其适合人类阅读。
 
 ${directionPrompt}
 
@@ -84,12 +106,14 @@ ${directionPrompt}
     }
   },
 
-  async generateFinalScript(csvTemplate: string, topic: string, wordCount: number) {
+  async generateFinalScript(csvTemplate: string, topic: string, wordCount: number, hook?: string) {
     const ai = getAI();
+    const hookPrompt = hook ? `\n🚨 强制开场白要求：你必须使用以下指定的开场白作为视频的开头，不要修改它：\n"${hook}"\n` : '';
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `请根据以下CSV模版和选定的主题，撰写一篇高质量的【纯口播】视频文案。
-
+${hookPrompt}
 选题：${topic}
 CSV模版：\n${csvTemplate}\n\n
 

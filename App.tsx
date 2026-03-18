@@ -1,5 +1,6 @@
 
 import React, { useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { AppState, WorkflowStep, Topic } from './types';
 import { INITIAL_STATE } from './constants';
 import { geminiService } from './services/geminiService';
@@ -36,11 +37,14 @@ const App: React.FC = () => {
     }
     setState(prev => ({ ...prev, isLoading: true }));
     try {
-      const analysisText = await geminiService.analyzeScript(state.referenceScript);
-      const csv = await geminiService.extractCSVTemplate(analysisText);
+      const { analysis, hookOptions } = await geminiService.analyzeScript(state.referenceScript);
+      const csv = await geminiService.extractCSVTemplate(analysis);
       setState(prev => ({
         ...prev,
         step: WorkflowStep.TEMPLATE,
+        analysis: analysis,
+        hookOptions: hookOptions || [],
+        selectedHookIndex: 0,
         csvTemplate: csv,
         isLoading: false
       }));
@@ -112,9 +116,7 @@ const App: React.FC = () => {
     }
   };
 
-  const selectTopicAndGenerate = async (topic: Topic | string) => {
-    if (state.isLoading || isGeneratingScript) return;
-    
+  const selectTopic = (topic: Topic | string) => {
     const title = typeof topic === 'string' ? topic : topic.title;
     if (!title.trim()) {
       handleError('选题内容不能为空');
@@ -124,20 +126,36 @@ const App: React.FC = () => {
     setState(prev => ({ 
       ...prev, 
       selectedTopic: typeof topic === 'string' ? { title: topic, explanation: '用户自定义选题', citationLinks: [] } : topic, 
-      isLoading: true 
+      step: WorkflowStep.HOOK_ASSEMBLY
     }));
+  };
+
+  const generateFinalScript = async () => {
+    if (state.isLoading || isGeneratingScript) return;
+    if (!state.selectedTopic) return;
+
+    setState(prev => ({ ...prev, isLoading: true }));
     setIsGeneratingScript(true);
     
     abortControllerRef.current = new AbortController();
 
     try {
+      let finalHook = '';
+      if (state.hookOptions.length > 0) {
+        const selected = state.hookOptions[state.selectedHookIndex];
+        finalHook = selected.template;
+        Object.keys(selected.slots).forEach(key => {
+          finalHook = finalHook.replace(`{${key}}`, selected.slots[key].current);
+        });
+      }
+
       const script = await geminiService.generateFinalScript(
         state.confirmedCsv || state.csvTemplate, 
-        title,
-        state.targetWordCount
+        state.selectedTopic.title,
+        state.targetWordCount,
+        finalHook
       );
       
-      // Verification that the process wasn't cancelled mid-way
       if (!abortControllerRef.current) return;
 
       const assets = await geminiService.generatePublicationAssets(script);
@@ -289,6 +307,7 @@ const App: React.FC = () => {
                 {isEditMode ? '切换表格视图' : '编辑原始 CSV'}
               </button>
             </div>
+            
             <div className="space-y-4">
               {isEditMode ? (
                 <textarea className="w-full h-80 p-5 font-mono text-sm border border-slate-200 rounded-xl bg-slate-900 text-blue-300 focus:ring-2 focus:ring-blue-500 outline-none"
@@ -381,40 +400,16 @@ const App: React.FC = () => {
                   />
                   <button 
                     disabled={state.isLoading || !state.customTopic.trim()} 
-                    onClick={() => selectTopicAndGenerate(state.customTopic)}
+                    onClick={() => selectTopic(state.customTopic)}
                     className={`w-full py-3.5 text-white rounded-xl font-bold shadow-lg transition-all active:scale-[0.98] ${
                        isGeneratingScript ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-800 hover:bg-black'
                     }`}
                   >
-                    {isGeneratingScript && state.selectedTopic?.explanation === '用户自定义选题' ? '正在生成全篇...' : '直接生成全篇口播+物料'}
+                    下一步：拼装开场白
                   </button>
                 </div>
               </div>
             </div>
-
-            {(isGeneratingScript || (state.isLoading && state.topics.length === 0)) && (
-              <div className="flex flex-col items-center justify-center py-12 bg-blue-50/30 rounded-2xl border border-blue-100 animate-fadeIn mb-8 relative z-10">
-                <div className="text-blue-600 font-bold text-lg mb-4 flex flex-col items-center">
-                  <svg className="animate-spin h-10 w-10 text-blue-600 mb-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span className="text-center">
-                    {isGeneratingScript 
-                      ? `联网专家正在为《${state.selectedTopic?.title}》撰写全篇...` 
-                      : '正在根据模版与实时热点为您构思选题...'}
-                  </span>
-                </div>
-                {isGeneratingScript && (
-                  <button 
-                    onClick={cancelGeneration}
-                    className="mt-2 px-8 py-2.5 bg-white border border-red-200 text-red-500 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors shadow-sm active:scale-95"
-                  >
-                    取消生成
-                  </button>
-                )}
-              </div>
-            )}
 
             <div className={`grid grid-cols-1 gap-4 transition-all duration-300 ${isGeneratingScript || (state.isLoading && state.topics.length === 0) ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
               {state.topics.length > 0 && (
@@ -428,13 +423,15 @@ const App: React.FC = () => {
                   {state.topics.map((topic, idx) => (
                     <div 
                       key={idx} 
-                      onClick={() => !state.isLoading && selectTopicAndGenerate(topic)} 
+                      onClick={() => !state.isLoading && selectTopic(topic)} 
                       className={`p-6 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-200 hover:bg-white cursor-pointer transition-all group relative ${state.isLoading ? 'cursor-wait opacity-60' : ''}`}
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <h3 className="text-lg font-bold text-slate-800 group-hover:text-blue-700">{topic.title}</h3>
-                          <p className="text-sm text-slate-500 mt-1">{topic.explanation}</p>
+                          <div className="text-sm text-slate-500 mt-1 prose prose-sm max-w-none">
+                            <ReactMarkdown>{topic.explanation}</ReactMarkdown>
+                          </div>
                           {topic.citationLinks && topic.citationLinks.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
                               <span className="text-[10px] font-bold text-slate-400 uppercase">参考来源:</span>
@@ -474,12 +471,168 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {state.step === WorkflowStep.HOOK_ASSEMBLY && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fadeIn">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">第四步：开场白拼装</h2>
+                <p className="text-slate-500 text-sm mt-1">针对选题《{state.selectedTopic?.title}》定制黄金开头</p>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">1. 选择开场策略</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {state.hookOptions.map((option, idx) => (
+                  <div 
+                    key={idx}
+                    onClick={() => setState(prev => ({ ...prev, selectedHookIndex: idx }))}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                      state.selectedHookIndex === idx
+                      ? 'border-blue-500 bg-blue-50 shadow-md' 
+                      : 'border-slate-100 bg-slate-50 hover:border-slate-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-500">
+                        {idx === 0 ? '原剧本风格' : `AI 变体: ${option.style}`}
+                      </span>
+                      {state.selectedHookIndex === idx && (
+                        <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-700 leading-relaxed italic">"{option.content}"</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {state.hookOptions.length > 0 && (
+              <div className="mb-8 bg-blue-50/50 border border-blue-100 p-6 rounded-2xl animate-fadeIn">
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-6 flex items-center">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a2 2 0 01-2 2H3a2 2 0 01-2-2V4a2 2 0 114 0v10a2 2 0 002 2h10a2 2 0 012 2v1a2 2 0 11-4 0v-1a2 2 0 012-2h7a2 2 0 012 2v1a2 2 0 11-4 0" />
+                  </svg>
+                  2. 策略词汇拼装台
+                </h3>
+                
+                <div className="space-y-6 text-slate-700 leading-loose">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-4">
+                    {state.hookOptions[state.selectedHookIndex].template.split(/(\{.*?\})/).map((part, i) => {
+                      const match = part.match(/\{(.*)\}/);
+                      if (match) {
+                        const key = match[1];
+                        const slot = state.hookOptions[state.selectedHookIndex].slots[key];
+                        return (
+                          <div key={i} className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 font-bold mb-1 ml-1">{slot.label}</span>
+                            <div className="flex items-center space-x-1">
+                              <select 
+                                className="bg-white border border-blue-200 rounded px-2 py-1.5 text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-400 shadow-sm"
+                                value={slot.current}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  setState(prev => {
+                                    const newOptions = [...prev.hookOptions];
+                                    newOptions[prev.selectedHookIndex].slots[key].current = newVal;
+                                    return { ...prev, hookOptions: newOptions };
+                                  });
+                                }}
+                              >
+                                {slot.options.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                                <option value="CUSTOM">-- 手动输入 --</option>
+                              </select>
+                              {slot.current === "CUSTOM" && (
+                                <input 
+                                  className="bg-white border border-blue-200 rounded px-2 py-1.5 text-sm w-32 outline-none focus:ring-2 focus:ring-blue-400"
+                                  placeholder="输入词汇..."
+                                  onBlur={(e) => {
+                                    const val = e.target.value;
+                                    if (val) {
+                                      setState(prev => {
+                                        const newOptions = [...prev.hookOptions];
+                                        newOptions[prev.selectedHookIndex].slots[key].current = val;
+                                        return { ...prev, hookOptions: newOptions };
+                                      });
+                                    }
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return <span key={i} className="text-slate-600 font-medium py-1.5 mt-5">{part}</span>;
+                    })}
+                  </div>
+                </div>
+                
+                <div className="mt-8 p-5 bg-white border border-blue-100 rounded-2xl shadow-inner">
+                  <p className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-tighter">实时拼装预览 (Real-time Preview)：</p>
+                  <p className="text-lg text-slate-800 font-medium italic leading-relaxed">
+                    "
+                    {state.hookOptions[state.selectedHookIndex].template.split(/(\{.*?\})/).map((part, i) => {
+                      const match = part.match(/\{(.*)\}/);
+                      if (match) {
+                        const key = match[1];
+                        return <span key={i} className="text-blue-600 border-b-2 border-blue-200 px-1 mx-0.5">{state.hookOptions[state.selectedHookIndex].slots[key].current}</span>;
+                      }
+                      return part;
+                    })}
+                    "
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isGeneratingScript && (
+              <div className="flex flex-col items-center justify-center py-8 bg-blue-50/30 rounded-2xl border border-blue-100 animate-fadeIn mb-8">
+                <div className="text-blue-600 font-bold text-sm mb-4 flex flex-col items-center">
+                  <svg className="animate-spin h-8 w-8 text-blue-600 mb-3" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>正在为您撰写全篇剧本与物料...</span>
+                </div>
+                <button 
+                  onClick={cancelGeneration}
+                  className="px-6 py-2 bg-white border border-red-200 text-red-500 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors"
+                >
+                  取消生成
+                </button>
+              </div>
+            )}
+
+            <div className="mt-8 flex justify-between items-center">
+              <button onClick={navigateBack} className="flex items-center space-x-1 text-slate-500 hover:text-slate-700 font-medium transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                <span>返回选题页面</span>
+              </button>
+              <button 
+                disabled={state.isLoading || isGeneratingScript} 
+                onClick={generateFinalScript} 
+                className={`px-10 py-4 text-white rounded-xl font-bold shadow-xl transition-all flex items-center space-x-2 active:scale-95 ${
+                  state.isLoading || isGeneratingScript ? 'bg-slate-400' : 'bg-slate-900 hover:bg-black'
+                }`}
+              >
+                <span>开始生成全篇口播剧本</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
         {state.step === WorkflowStep.GENERATION && (
           <div className="space-y-8 animate-fadeIn">
             <div className="flex justify-start">
               <button onClick={navigateBack} className="flex items-center space-x-1 text-slate-500 hover:text-slate-700 font-medium transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                <span>返回选题页面</span>
+                <span>返回开场拼装</span>
               </button>
             </div>
 

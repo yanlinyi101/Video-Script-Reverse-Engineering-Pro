@@ -10,7 +10,8 @@ const steps = [
   { id: 1, label: '摄取分析' },
   { id: 2, label: '模版提取' },
   { id: 3, label: '选题构思' },
-  { id: 4, label: '全篇生成' },
+  { id: 4, label: '开场拼装' },
+  { id: 5, label: '全篇生成' },
 ];
 
 export const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep }) => {

@@ -2,7 +2,8 @@ export enum WorkflowStep {
   ANALYSIS = 1,
   TEMPLATE = 2,
   IDEATION = 3,
-  GENERATION = 4
+  HOOK_ASSEMBLY = 4,
+  GENERATION = 5
 }
 
 export interface ScriptAnalysis {
@@ -26,10 +27,33 @@ export interface PublicationAssets {
   wechatSalesCopy: string;
 }
 
+export interface HookOption {
+  style: string;
+  content: string;
+  template: string; // 包含占位符的模板，如 "为什么历史上那些{label}的人，最后都{end}？"
+  slots: {
+    [key: string]: {
+      current: string;
+      options: string[];
+      label: string;
+    };
+  };
+}
+
+export interface AssemblyData {
+  positiveLabel: string;
+  tragicEnd: string;
+  cases: string[];
+  coreKeyword: string;
+}
+
 export interface AppState {
   step: WorkflowStep;
   referenceScript: string;
-  analysis: ScriptAnalysis | null;
+  analysis: string | null;
+  hookOptions: HookOption[];
+  selectedHookIndex: number;
+  useAssembly: boolean;
   csvTemplate: string;
   confirmedCsv: string;
   topicDirection: string;
